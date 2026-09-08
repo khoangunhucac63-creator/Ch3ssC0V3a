@@ -1,58 +1,35 @@
-from flask import Flask, render_template_string, request, jsonify
-from curl_cffi import requests as crequests
 import json
+import random
+from flask import Flask, request, jsonify, render_template_string
+from curl_cffi import requests as crequests
 
 app = Flask(__name__)
 
-@app.route('/api/chat', methods=['POST'])
-def proxy_chat():
-    try:
-        auth_header = request.headers.get('Authorization', '')
-        payload = request.get_json()
+# Danh sách 3 proxy SOCKS5 của bạn
+PROXY_LIST = [
+    "socks5://pilcikkg:esenmppky29k@198.23.243.226:6361",
+    "socks5://pilcikkg:esenmppky29k@38.154.185.97:6370",
+    "socks5://pilcikkg:esenmppky29k@191.96.254.138:6185"
+]
 
-        target_url = payload.pop('target_endpoint', '').strip()
-        if not target_url:
-            return jsonify({"error": "Thiếu API Endpoint"}), 400
+# Biến toàn cục để theo dõi chỉ số proxy cho cơ chế xoay vòng tuần tự
+proxy_index = 0
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": auth_header,
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
+def get_next_proxy():
+    global proxy_index
+    proxy = PROXY_LIST[proxy_index]
+    # Chuyển sang proxy kế tiếp cho lần gọi sau, xoay vòng tròn
+    proxy_index = (proxy_index + 1) % len(PROXY_LIST)
+    return proxy
 
-        # Sử dụng curl_cffi để giả mạo trình duyệt Chrome, vượt qua Cloudflare
-        response = crequests.post(
-            target_url,
-            headers=headers,
-            json=payload,
-            impersonate="chrome120",
-            timeout=25
-        )
-
-        if response.status_code == 200:
-            try:
-                response.json() # Kiểm tra xem có phải JSON chuẩn không
-                return response.text, 200, [('Content-Type', 'application/json')]
-            except json.JSONDecodeError:
-                snippet = response.text[:300].replace('\n', ' ')
-                return jsonify({"error": f"TabiToken trả về Non-JSON: {snippet}"}), 500
-
-        return jsonify({"error": f"TabiToken trả về lỗi HTTP {response.status_code}: {response.text[:200]}"}), 500
-
-    except Exception as e:
-        return jsonify({"error": f"Lỗi Gateway: {str(e)}"}), 500
-
-@app.route('/')
-def index():
-    return render_template_string(HTML_TEMPLATE)
-
+# Giao diện HTML tích hợp sẵn
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cờ Vua AI - Render</title>
+<title>Cờ Vua AI - Proxy Rotation</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
@@ -68,11 +45,9 @@ button { background: #0284c7; font-weight: bold; cursor: pointer; margin-top: 5p
 .btn-danger { background: #dc2626 !important; }
 .btn-secondary { background: #475569 !important; font-size: 0.75rem; padding: 5px 8px; margin-top: 4px; }
 .status-box { margin-top: 8px; padding: 6px; background: #0f172a; border-radius: 6px; border: 1px solid #334155; font-size: 0.8rem; font-weight: bold; color: #38bdf8; }
-
 .log-header { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; margin-bottom: 4px; }
 .log-header span { font-size: 0.8rem; font-weight: bold; color: #94a3b8; }
 .log-box { height: 200px; overflow-y: auto; background: #020617; border-radius: 6px; border: 1px solid #334155; padding: 8px; font-family: 'Courier New', Courier, monospace; font-size: 0.72rem; color: #38bdf8; white-space: pre-wrap; word-break: break-all; }
-
 .highlight-square { background-color: rgba(255, 255, 0, 0.4) !important; }
 .highlight-hint { background: radial-gradient(circle, rgba(16, 185, 129, 0.7) 28%, transparent 28%) !important; }
 </style>
@@ -80,23 +55,17 @@ button { background: #0284c7; font-weight: bold; cursor: pointer; margin-top: 5p
 <body>
 
 <div class="container">
-    <h1>Cờ Vua AI (Render Server)</h1>
-
-    <div class="card">
-        <div id="board"></div>
-    </div>
-
+    <h1>Cờ Vua AI (Proxy Rotation)</h1>
+    <div class="card"><div id="board"></div></div>
     <div class="card">
         <div class="form-group">
             <label>API Endpoint</label>
             <input type="text" id="apiEndpoint" value="https://tabitoken.com/v1/chat/completions">
         </div>
-
         <div class="form-group">
             <label>API Key (sk-...)</label>
             <input type="text" id="apiKey" placeholder="Dán API Key...">
         </div>
-
         <div class="form-group">
             <label>Chế độ chơi</label>
             <select id="gameMode" onchange="handleModeChange()">
@@ -104,7 +73,6 @@ button { background: #0284c7; font-weight: bold; cursor: pointer; margin-top: 5p
                 <option value="aivai">AI vs AI (4.8 vs 5)</option>
             </select>
         </div>
-
         <div id="pvaiSettings">
             <div class="form-group">
                 <label>Chọn Model AI</label>
@@ -121,7 +89,6 @@ button { background: #0284c7; font-weight: bold; cursor: pointer; margin-top: 5p
                 </select>
             </div>
         </div>
-
         <div id="aivaiSettings" style="display: none;">
             <div class="form-group">
                 <label>Cấu hình Trắng / Đen</label>
@@ -131,12 +98,9 @@ button { background: #0284c7; font-weight: bold; cursor: pointer; margin-top: 5p
                 </select>
             </div>
         </div>
-
         <button id="startBtn" onclick="startGame()">Bắt Đầu Ván Mới</button>
         <button id="stopBtn" class="btn-danger" onclick="stopGame()" style="display: none;">Dừng Trận Đấu</button>
-
         <div class="status-box" id="statusBox">Trạng thái: Sẵn sàng</div>
-
         <div class="log-header">
             <span>FULL DEBUG LOG</span>
             <div>
@@ -151,7 +115,6 @@ button { background: #0284c7; font-weight: bold; cursor: pointer; margin-top: 5p
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
-
 <script>
 let board = null;
 let game = new Chess();
@@ -167,13 +130,8 @@ function chessDotComPieceTheme(piece) {
 
 function handleModeChange() {
     const mode = $('#gameMode').val();
-    if (mode === 'pvai') {
-        $('#pvaiSettings').show();
-        $('#aivaiSettings').hide();
-    } else {
-        $('#pvaiSettings').hide();
-        $('#aivaiSettings').show();
-    }
+    if (mode === 'pvai') { $('#pvaiSettings').show(); $('#aivaiSettings').hide(); }
+    else { $('#pvaiSettings').hide(); $('#aivaiSettings').show(); }
 }
 
 function log(type, msg) {
@@ -184,20 +142,12 @@ function log(type, msg) {
 }
 
 function clearLog() { $('#logBox').empty(); }
-
-function copyLog() {
-    navigator.clipboard.writeText($('#logBox').text()).then(() => alert('Đã copy Log!'));
-}
-
+function copyLog() { navigator.clipboard.writeText($('#logBox').text()).then(() => alert('Đã copy Log!')); }
 function updateStatus(msg) { $('#statusBox').text('Trạng thái: ' + msg); }
-
-function removeHighlights() {
-    $('#board .square-55d63').removeClass('highlight-square highlight-hint');
-}
+function removeHighlights() { $('#board .square-55d63').removeClass('highlight-square highlight-hint'); }
 
 function handleSquareClick(square) {
     if (!isRunning || $('#gameMode').val() === 'aivai' || game.game_over()) return;
-
     const playerColor = $('#playerColor').val();
     if ((game.turn() === 'w' && playerColor !== 'w') || (game.turn() === 'b' && playerColor !== 'b')) return;
 
@@ -207,15 +157,12 @@ function handleSquareClick(square) {
             selectedSquare = square;
             removeHighlights();
             $('#board .square-' + square).addClass('highlight-square');
-
-            const moves = game.moves({ square: square, verbose: true });
-            moves.forEach(m => $('#board .square-' + m.to).addClass('highlight-hint'));
+            game.moves({ square: square, verbose: true }).forEach(m => $('#board .square-' + m.to).addClass('highlight-hint'));
         }
     } else {
         const move = game.move({ from: selectedSquare, to: square, promotion: 'q' });
         removeHighlights();
         selectedSquare = null;
-
         if (move !== null) {
             board.position(game.fen());
             log('MOVE', `Bạn đi: ${move.san} | FEN mới: ${game.fen()}`);
@@ -236,7 +183,6 @@ function checkGameState() {
 function startGame() {
     let apiKey = $('#apiKey').val().trim();
     let endpoint = $('#apiEndpoint').val().trim();
-
     if (!apiKey) { alert('Vui lòng nhập API Key!'); return; }
     if (!endpoint) { alert('Vui lòng nhập Endpoint!'); return; }
 
@@ -258,7 +204,6 @@ function startGame() {
     $('#stopBtn').show();
     clearLog();
     log('SYSTEM', '--- Bắt đầu ván đấu mới ---');
-    log('SYSTEM', `Chế độ: ${mode} | FEN: ${game.fen()}`);
     updateStatus('Đang trong trận đấu');
 
     if (mode === 'aivai' || (mode === 'pvai' && playerColor === 'b')) triggerAiMove();
@@ -288,19 +233,17 @@ async function triggerAiMove() {
     const turnName = game.turn() === 'w' ? 'Trắng' : 'Đen';
     updateStatus(`${turnName} (${modelName}) đang suy nghĩ...`);
     const possibleMoves = game.moves();
-
     const promptText = `Trạng thái FEN: "${game.fen()}". Nước hợp lệ: [${possibleMoves.join(', ')}]. Chọn 1 nước đi tốt nhất dạng SAN (vd: e4, Nf3). Chỉ trả lời duy nhất mã nước đi.`;
 
     let authHeaderValue = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
-
-    log('API_REQ', `Model: ${modelName} | Gửi request...`);
+    log('API_REQ', `Model: ${modelName} | Gửi request qua Proxy Gateway...`);
 
     try {
         const payload = {
-            target_endpoint: endpoint,
             model: modelName,
             messages: [{ role: 'user', content: promptText }],
-            temperature: 0.2
+            temperature: 0.2,
+            target_endpoint: endpoint
         };
 
         const res = await fetch('/api/chat', {
@@ -326,14 +269,13 @@ async function triggerAiMove() {
             const match = possibleMoves.find(m => m.toLowerCase() === aiMoveStr.toLowerCase());
             if (match) move = game.move(match);
         }
-        
         if (!move) {
-            log('WARN', `Nước không hợp lệ (${aiMoveStr}), chọn ngẫu nhiên.`);
+            log('WARN', `Nước không hợp lệ, chọn ngẫu nhiên.`);
             move = game.move(possibleMoves[Math.floor(Math.random() * possibleMoves.length)]);
         }
 
         board.position(game.fen());
-        log('MOVE', `${turnName} (${modelName}): ${move.san} | FEN mới: ${game.fen()}`);
+        log('MOVE', `${turnName} (${modelName}): ${move.san}`);
         checkGameState();
 
         if (isRunning && !game.game_over()) {
@@ -352,17 +294,11 @@ $(document).ready(function() {
     if (savedKey) $('#apiKey').val(savedKey);
     if (savedEndpoint) $('#apiEndpoint').val(savedEndpoint);
 
-    board = Chessboard('board', {
-        draggable: false,
-        position: 'start',
-        pieceTheme: chessDotComPieceTheme
-    });
-
+    board = Chessboard('board', { draggable: false, position: 'start', pieceTheme: chessDotComPieceTheme });
     $('#board').on('click', '.square-55d63', function() {
         const square = $(this).attr('data-square');
         if (square) handleSquareClick(square);
     });
-
     setTimeout(() => board.resize(), 300);
 });
 </script>
@@ -370,5 +306,55 @@ $(document).ready(function() {
 </html>
 """
 
+@app.route('/')
+def index():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/api/chat', methods=['POST'])
+def proxy_chat():
+    try:
+        auth_header = request.headers.get('Authorization', '')
+        payload = request.get_json()
+
+        target_url = payload.pop('target_endpoint', '').strip()
+        if not target_url:
+            return jsonify({"error": "Thiếu API Endpoint"}}, 400
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": auth_header,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+
+        # Lấy proxy tiếp theo theo cơ chế xoay vòng tuần tự (Round-Robin)
+        chosen_proxy = get_next_proxy()
+        proxies = {
+            "http": chosen_proxy,
+            "https": chosen_proxy
+        }
+
+        # Dùng curl_cffi vượt Cloudflare
+        response = crequests.post(
+            target_url,
+            headers=headers,
+            json=payload,
+            proxies=proxies,
+            impersonate="chrome120",
+            timeout=25
+        )
+
+        if response.status_code == 200:
+            try:
+                response.json()
+                return response.text, 200, [('Content-Type', 'application/json')]
+            except json.JSONDecodeError:
+                snippet = response.text[:300].replace('\n', ' ')
+                return jsonify({"error": f"TabiToken trả về Non-JSON: {snippet}"}), 500
+
+        return jsonify({"error": f"TabiToken trả về lỗi HTTP {response.status_code}: {response.text[:200]}"}), 500
+
+    except Exception as e:
+        return jsonify({"error": f"Lỗi Gateway: {str(e)}"}}, 500
+
 if __name__ == '__main__':
-    app.run()
+    app.run(host='0.0.0.0', port=5000, debug=True)
