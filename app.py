@@ -1,5 +1,5 @@
 from flask import Flask, render_template_string, request, jsonify
-import subprocess
+from curl_cffi import requests as crequests
 import json
 
 app = Flask(__name__)
@@ -14,25 +14,30 @@ def proxy_chat():
         if not target_url:
             return jsonify({"error": "Thiếu API Endpoint"}), 400
 
-        # Gọi trực tiếp API TabiToken từ Render
-        curl_cmd = [
-            "curl", "-s", "-X", "POST", target_url,
-            "-H", "Content-Type: application/json",
-            "-H", f"Authorization: {auth_header}",
-            "-d", json.dumps(payload),
-            "--max-time", "20"
-        ]
-        
-        result = subprocess.run(curl_cmd, capture_output=True, text=True)
-        if result.returncode == 0 and result.stdout:
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": auth_header,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+
+        # Sử dụng curl_cffi để giả mạo trình duyệt Chrome, vượt qua Cloudflare
+        response = crequests.post(
+            target_url,
+            headers=headers,
+            json=payload,
+            impersonate="chrome120",
+            timeout=25
+        )
+
+        if response.status_code == 200:
             try:
-                json.loads(result.stdout)
-                return result.stdout, 200, [('Content-Type', 'application/json')]
+                response.json() # Kiểm tra xem có phải JSON chuẩn không
+                return response.text, 200, [('Content-Type', 'application/json')]
             except json.JSONDecodeError:
-                snippet = result.stdout[:300].replace('\n', ' ')
+                snippet = response.text[:300].replace('\n', ' ')
                 return jsonify({"error": f"TabiToken trả về Non-JSON: {snippet}"}), 500
 
-        return jsonify({"error": "Không nhận được phản hồi từ TabiToken"}), 500
+        return jsonify({"error": f"TabiToken trả về lỗi HTTP {response.status_code}: {response.text[:200]}"}), 500
 
     except Exception as e:
         return jsonify({"error": f"Lỗi Gateway: {str(e)}"}), 500
