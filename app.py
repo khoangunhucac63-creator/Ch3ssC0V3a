@@ -5,11 +5,11 @@ from curl_cffi import requests as crequests
 
 app = Flask(__name__)
 
-# Danh sách 3 proxy SOCKS5 của bạn
+# Danh sách proxy đã chuyển sang định dạng HTTP (bạn có thể điều chỉnh lại số port phía sau nếu nhà cung cấp dùng port HTTP riêng)
 PROXY_LIST = [
-    "socks5://pilcikkg:esenmppky29k@198.23.243.226:6361",
-    "socks5://pilcikkg:esenmppky29k@38.154.185.97:6370",
-    "socks5://pilcikkg:esenmppky29k@191.96.254.138:6185"
+    "http://pilcikkg:esenmppky29k@198.23.243.226:6361",
+    "http://pilcikkg:esenmppky29k@38.154.185.97:6370",
+    "http://pilcikkg:esenmppky29k@191.96.254.138:6185"
 ]
 
 proxy_index = 0
@@ -26,7 +26,7 @@ HTML_TEMPLATE = """
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cờ Vua AI - Proxy Rotation</title>
+<title>Cờ Vua AI - Proxy HTTP Rotation</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
@@ -52,7 +52,7 @@ button { background: #0284c7; font-weight: bold; cursor: pointer; margin-top: 5p
 <body>
 
 <div class="container">
-    <h1>Cờ Vua AI (Proxy Rotation)</h1>
+    <h1>Cờ Vua AI (HTTP Proxy)</h1>
     <div class="card"><div id="board"></div></div>
     <div class="card">
         <div class="form-group">
@@ -233,7 +233,7 @@ async function triggerAiMove() {
     const promptText = `Trạng thái FEN: "${game.fen()}". Nước hợp lệ: [${possibleMoves.join(', ')}]. Chọn 1 nước đi tốt nhất dạng SAN (vd: e4, Nf3). Chỉ trả lời duy nhất mã nước đi.`;
 
     let authHeaderValue = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
-    log('API_REQ', `Model: ${modelName} | Gửi request qua Proxy Gateway...`);
+    log('API_REQ', `Model: ${modelName} | Gửi request qua HTTP Proxy...`);
 
     try {
         const payload = {
