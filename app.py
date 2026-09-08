@@ -12,17 +12,14 @@ PROXY_LIST = [
     "socks5://pilcikkg:esenmppky29k@191.96.254.138:6185"
 ]
 
-# Biến toàn cục để theo dõi chỉ số proxy cho cơ chế xoay vòng tuần tự
 proxy_index = 0
 
 def get_next_proxy():
     global proxy_index
     proxy = PROXY_LIST[proxy_index]
-    # Chuyển sang proxy kế tiếp cho lần gọi sau, xoay vòng tròn
     proxy_index = (proxy_index + 1) % len(PROXY_LIST)
     return proxy
 
-# Giao diện HTML tích hợp sẵn
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="vi">
@@ -318,7 +315,7 @@ def proxy_chat():
 
         target_url = payload.pop('target_endpoint', '').strip()
         if not target_url:
-            return jsonify({"error": "Thiếu API Endpoint"}}, 400
+            return jsonify({"error": "Thiếu API Endpoint"}), 400
 
         headers = {
             "Content-Type": "application/json",
@@ -326,14 +323,12 @@ def proxy_chat():
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
 
-        # Lấy proxy tiếp theo theo cơ chế xoay vòng tuần tự (Round-Robin)
         chosen_proxy = get_next_proxy()
         proxies = {
             "http": chosen_proxy,
             "https": chosen_proxy
         }
 
-        # Dùng curl_cffi vượt Cloudflare
         response = crequests.post(
             target_url,
             headers=headers,
@@ -354,7 +349,7 @@ def proxy_chat():
         return jsonify({"error": f"TabiToken trả về lỗi HTTP {response.status_code}: {response.text[:200]}"}), 500
 
     except Exception as e:
-        return jsonify({"error": f"Lỗi Gateway: {str(e)}"}}, 500
+        return jsonify({"error": f"Lỗi Gateway: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)
