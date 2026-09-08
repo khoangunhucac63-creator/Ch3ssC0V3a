@@ -12,9 +12,9 @@ def proxy_chat():
 
         target_url = payload.pop('target_endpoint', '').strip()
         if not target_url:
-            return jsonify({"error": "Thiếu API Endpoint"}}, 400
+            return jsonify({"error": "Thiếu API Endpoint"}), 400
 
-        # Gọi trực tiếp API TabiToken từ Render (Render hoàn toàn không chặn outbound network)
+        # Gọi trực tiếp API TabiToken từ Render
         curl_cmd = [
             "curl", "-s", "-X", "POST", target_url,
             "-H", "Content-Type: application/json",
@@ -32,7 +32,7 @@ def proxy_chat():
                 snippet = result.stdout[:300].replace('\n', ' ')
                 return jsonify({"error": f"TabiToken trả về Non-JSON: {snippet}"}), 500
 
-        return jsonify({"error": "Không nhận được phản hồi từ TabiToken"}}, 500
+        return jsonify({"error": "Không nhận được phản hồi từ TabiToken"}), 500
 
     except Exception as e:
         return jsonify({"error": f"Lỗi Gateway: {str(e)}"}), 500
